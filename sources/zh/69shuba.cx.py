@@ -14,9 +14,9 @@ headers = {
     "Accept-Language": "en-US,en;q=0.9,de-CH;q=0.8,de;q=0.7",
     "Cache-Control": "no-cache",
     "Content-Type": "application/x-www-form-urlencoded",
-    "Origin": "https://www.69shu.pro",
+    "Origin": "https://69shuba.cx/",
     "DNT": "1",
-    "Referer": "https://www.69shu.pro/modules/article/search.php",
+    "Referer": "https://69shuba.cx/modules/article/search.php",
     "Connection": "keep-alive",
     "Upgrade-Insecure-Requests": "1",
     "Sec-Ch-Ua": '"Not_A Brand";v="8", "Chromium";v="120", "Opera GX";v="106"',
@@ -28,32 +28,26 @@ headers = {
 }
 
 logger = logging.getLogger(__name__)
-search_url = "https://www.69shu.pro/modules/article/search.php"    # Updated to the new domain
+search_url = "https://69shuba.cx/modules/article/search.php"
 
 
 class sixnineshu(Crawler):
     base_url = [
-        "https://www.69shuba.com/",
-        "https://www.69shu.com/",
-        "https://www.69xinshu.com/",
-        "https://www.69shu.pro/",
-        "https://www.69shuba.pro/"
+        "https://69shuba.cx"
     ]
 
     def initialize(self):
-        # the default lxml parser cannot handle the huge gbk encoded sites (fails after 4.3k chapters)
         self.init_parser("html.parser")
         self.init_executor(ratelimit=20)
 
     def search_novel(self, query):
         query = urllib.parse.quote(query.encode("gbk"))
-        data = f"searchkey={query}&submit=Search"
-        soup = self.post_soup(
+        data = f"searchkey={query}&searchtype=all"
+        soup = self.get_soup(
             search_url,
             headers=headers,
             data=data,
             encoding="gbk",
-            # cookies=self.cookies2,
         )
 
         results = []
@@ -61,7 +55,7 @@ class sixnineshu(Crawler):
             results.append(
                 {
                     "title": novel.select_one("h3 a:not([imgbox])").text.title(),
-                    "url": self.absolute_url(novel.select_one("a")["href"]),
+                    "url": self.absolute_url(novel.select_one("h3 a.imgbox")["href"]),
                     "info": "Latest: %s" % novel.select_one("div.zxzj p").text,
                 }
             )
@@ -72,7 +66,7 @@ class sixnineshu(Crawler):
         logger.debug("Visiting %s", self.novel_url)
         soup = self.get_soup(self.novel_url, encoding="gbk")
 
-        possible_title = soup.select_one("div.booknav2 h1")
+        possible_title = soup.select_one("div.booknav2 h1 a")
         assert possible_title, "No novel title"
         self.novel_title = possible_title.text.strip()
         logger.info("Novel title: %s", self.novel_title)
@@ -82,46 +76,30 @@ class sixnineshu(Crawler):
             self.novel_cover = self.absolute_url(possible_image["src"])
         logger.info("Novel cover: %s", self.novel_cover)
 
-        possible_author = soup.select_one('.booknav2 p a[href*="authorarticle"]')
+        possible_author = soup.select_one('.booknav2 p a')
         if isinstance(possible_author, Tag):
             self.novel_author = possible_author.text.strip()
         logger.info("Novel Author: %s", self.novel_author)
 
-        possible_synopsis = soup.select_one("div.navtxt p")
-        if isinstance(possible_synopsis, Tag):
-            self.novel_synopsis = possible_synopsis.text.strip()
-        logger.info("Novel Synopsis: %s", self.novel_synopsis)
-
-        # Only one category per novel on this website
-        possible_tag = soup.select_one('.booknav2 p a[href*="top"]')
+        possible_tag = soup.select_one('div.booknav2 > p:nth-child(4) > a')
         if isinstance(possible_tag, Tag):
             self.novel_tags = [possible_tag.text.strip()]
         logger.info("Novel Tag: %s", self.novel_tags)
 
-        # https://www.69shuba.com/txt/A43616.htm -> https://www.69shuba.com/A43616/
-        soup = self.get_soup(self.novel_url.replace("/txt/", "/").replace(".htm", "/"), encoding="gbk")
+        chapter_catalog = self.get_soup(f'{self.novel_url[:-4]}/', encoding="gbk")
+        chapter_list = chapter_catalog.select("div#catalog li")
 
-        # manually correct their false chapter identifiers if need be
-        correction = 0
-        for idx, li in enumerate(soup.select("div#catalog ul li")):
-            chap_id = int(li["data-num"])
-            if idx == 0:
-                # 1-2 = -1; 1-1 = 0; 1 - 0 = +1
-                correction = 1 - chap_id
-            chap_id += correction
+        for item in reversed(chapter_list):
+            chap_id = int(item["data-num"])
             vol_id = len(self.chapters) // 100 + 1
             if len(self.chapters) % 100 == 0:
                 self.volumes.append(Volume(vol_id))
-            a = li.select_one("a")
-            if not a:
-                # this should not occur with html.parser, if it does, likely due to parser/encoding issue
-                logger.warning("Failed to get Chapter %d! Missing Link", chap_id)
-                continue
+            a = item.a["href"]
             self.chapters.append(
                 Chapter(
                     chap_id,
-                    url=self.absolute_url(a["href"]),
-                    title=li.text.strip(),
+                    url=self.absolute_url(a),
+                    title=item.a.text.strip(),
                     volume=vol_id,
                 )
             )

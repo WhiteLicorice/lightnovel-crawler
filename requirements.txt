@@ -9,7 +9,7 @@ requests>=2.20.0,<3.0.0
 python-slugify>=4.0.0,<9.0.0
 colorama>=0.4.0,<0.5.0
 tqdm>=4.60,<5.0
-js2py>=0.71
+PyExecJS>=1.5.1,<2.0.0
 ebooklib>=0.17.0,<1.0.0
 pillow>=6.0.0
 cloudscraper>=1.2.71
@@ -31,7 +31,7 @@ black
 flake8
 tk-tools
 pyinstaller
-setuptools<=60.0.0
+setuptools>=70.0.0
 # cryptography<=3.3.2
 # cssutils>=1.0.0,<2.7.0
 # win_unicode_console~=0.5
